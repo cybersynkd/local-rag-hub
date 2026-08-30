@@ -7,7 +7,6 @@ from sentence_transformers import SentenceTransformer
 
 VECTOR_FILE = 'local_vector_index.json'
 
-# Cache the model so it loads once and stays in memory
 @st.cache_resource
 def load_embedding_model():
     return SentenceTransformer('all-MiniLM-L6-v2')
@@ -15,8 +14,7 @@ def load_embedding_model():
 model = load_embedding_model()
 
 def get_embedding(text):
-    vector = model.encode(text)
-    return vector.tolist()
+    return model.encode(text).tolist()
 
 def cosine_similarity(v1, v2):
     a, b = np.array(v1), np.array(v2)
@@ -48,40 +46,41 @@ def query_vector_store(query_text, top_k=3):
         return []
     with open(VECTOR_FILE, 'r', encoding='utf-8') as f:
         records = json.load(f)
-        
     q_vec = get_embedding(query_text)
     scored = []
     for r in records:
         vec = r.get('vector', get_embedding(r.get('text', '')))
         score = cosine_similarity(q_vec, vec)
         scored.append((score, r))
-        
     scored.sort(key=lambda x: x[0], reverse=True)
     return [item[1] for item in scored[:top_k]]
 
-st.title("🌱 True Semantic RAG Hub")
+st.title("🌱 Personal Intelligence Chat Hub")
 
-user_input = st.text_input("Log action or enter query text...")
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("Record & Embed"):
-        if user_input.strip():
-            timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-            save_vector_entry(user_input.strip(), timestamp)
-            st.success("Action recorded with true semantic embedding!")
-        else:
-            st.error("Entry empty.")
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-with col2:
-    if st.button("Semantic Search"):
-        if user_input.strip():
-            relevant = query_vector_store(user_input.strip(), top_k=3)
-            if relevant:
-                st.write(f"--- Semantic Match for: '{user_input}' ---")
-                for r in relevant:
-                    st.text(f"[{r['time']}] {r['text']}")
-            else:
-                st.warning("No relevant context found.")
-        else:
-            st.error("Enter query text.")
+if prompt := st.chat_input("Ask a question or log an action..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    
+    relevant = query_vector_store(prompt, top_k=3)
+    
+    if relevant:
+        context_snippets = "\n".join([f"- [{r['time']}] {r['text']}" for r in relevant])
+        response_content = f"Logged to memory. Relevant context found:\n{context_snippets}"
+    else:
+        response_content = f"Logged to memory. No prior matching context found for '{prompt}'."
+
+    save_vector_entry(prompt, timestamp)
+
+    with st.chat_message("assistant"):
+        st.markdown(response_content)
+    st.session_state.messages.append({"role": "assistant", "content": response_content})
