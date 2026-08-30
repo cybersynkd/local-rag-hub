@@ -8,7 +8,6 @@ import google.generativeai as genai
 
 VECTOR_FILE = 'local_vector_index.json'
 
-# Configure Gemini API using Streamlit secrets or a direct input
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
@@ -70,7 +69,8 @@ def query_vector_store(query_text, top_k=3):
 
 def synthesize_response(prompt, context_snippets):
     try:
-        model_llm = genai.GenerativeModel('gemini-1.5-flash')
+        # Updated to current active model name
+        model_llm = genai.GenerativeModel('gemini-2.5-flash')
         full_prompt = f"""You are a personal intelligence assistant. Use the following retrieved historical context to answer the user's prompt accurately. If the context doesn't have the answer, rely on your general knowledge while keeping the user's records in mind.
 
 Retrieved Context:
@@ -81,7 +81,7 @@ User Prompt: {prompt}
         response = model_llm.generate_content(full_prompt)
         return response.text
     except Exception as e:
-        return f"Logged to memory, but synthesis failed (Check API Key): {str(e)}"
+        return f"Logged to memory, but synthesis failed: {str(e)}"
 
 st.title("🌱 Personal Intelligence Chat Hub")
 
