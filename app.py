@@ -8,7 +8,6 @@ from google import genai
 
 VECTOR_FILE = 'local_vector_index.json'
 
-# Initialize the modern Gemini client
 api_key = st.secrets.get("GEMINI_API_KEY")
 if not api_key:
     api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
@@ -79,7 +78,7 @@ Retrieved Context:
 User Prompt: {prompt}
 """
         response = client.models.generate_content(
-            model='gemini-3.6-flash⁠',
+            model='gemini-3.6-flash',
             contents=full_prompt,
         )
         return response.text
@@ -88,7 +87,6 @@ User Prompt: {prompt}
 
 st.title("🌱 Personal Intelligence Chat Hub")
 
-# Sidebar for File Ingestion
 st.sidebar.header("Bulk Data Ingestion")
 uploaded_file = st.sidebar.file_uploader("Upload text or code file", type=["txt", "py", "md", "json"])
 if uploaded_file is not None:
