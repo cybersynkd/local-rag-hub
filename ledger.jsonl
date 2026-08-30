@@ -1,0 +1,30 @@
+import hashlib
+import json
+import datetime
+
+class LedgerBlock:
+    def __init__(self, prev_hash, node_id, payload):
+        self.prev_hash = prev_hash
+        self.timestamp = datetime.datetime.utcnow().isoformat()
+        self.node_id = node_id
+        self.payload = payload
+        self.block_id = self._compute_hash()
+
+    def _compute_hash(self):
+        block_data = {
+            "prev_hash": self.prev_hash,
+            "timestamp": self.timestamp,
+            "node_id": self.node_id,
+            "payload": self.payload
+        }
+        block_string = json.dumps(block_data, sort_keys=True)
+        return hashlib.sha256(block_string.encode('utf-8')).hexdigest()
+
+    def to_dict(self):
+        return {
+            "block_id": self.block_id,
+            "prev_hash": self.prev_hash,
+            "timestamp": self.timestamp,
+            "node_id": self.node_id,
+            "payload": self.payload
+        }
