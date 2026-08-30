@@ -44,7 +44,6 @@ def save_vector_entry(text, timestamp):
         except Exception:
             records = []
     
-    # Prevent duplicate text entries
     if any(r.get('text') == text for r in records):
         return
 
@@ -56,9 +55,11 @@ def save_vector_entry(text, timestamp):
     with open(VECTOR_FILE, 'w', encoding='utf-8') as f:
         json.dump(records, f, indent=4)
 
-# Automatically load and index local .txt files on startup if not already done
 @st.cache_resource
 def auto_ingest_local_files():
+    if os.path.exists(VECTOR_FILE):
+        return  
+        
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     local_files = glob.glob("*.txt")
     for file_path in local_files:
