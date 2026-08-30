@@ -18,6 +18,8 @@ def get_embedding(text):
 
 def cosine_similarity(v1, v2):
     a, b = np.array(v1), np.array(v2)
+    if a.shape != b.shape:
+        return 0.0
     dot_product = np.dot(a, b)
     norm1 = np.linalg.norm(a)
     norm2 = np.linalg.norm(b)
@@ -49,7 +51,9 @@ def query_vector_store(query_text, top_k=3):
     q_vec = get_embedding(query_text)
     scored = []
     for r in records:
-        vec = r.get('vector', get_embedding(r.get('text', '')))
+        vec = r.get('vector')
+        if not vec or len(vec) != len(q_vec):
+            continue
         score = cosine_similarity(q_vec, vec)
         scored.append((score, r))
     scored.sort(key=lambda x: x[0], reverse=True)
