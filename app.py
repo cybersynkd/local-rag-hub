@@ -98,8 +98,16 @@ if uploaded_file is not None:
             file_content = bytes_data.decode("latin-1", errors="ignore")
             
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-        save_vector_entry(f"File Upload [{uploaded_file.name}]:\n{file_content}", timestamp)
-        st.sidebar.success(f"Successfully ingested {uploaded_file.name} into vector store!")
+        
+        paragraphs = [p.strip() for p in file_content.split("\n\n") if p.strip()]
+        if not paragraphs:
+            paragraphs = [file_content]
+            
+        for i, chunk in enumerate(paragraphs):
+            chunk_label = f"File Upload [{uploaded_file.name}] Part {i+1}/{len(paragraphs)}"
+            save_vector_entry(f"{chunk_label}:\n{chunk}", timestamp)
+            
+        st.sidebar.success(f"Successfully ingested {uploaded_file.name} in {len(paragraphs)} safe chunks!")
     except Exception as e:
         st.sidebar.error(f"Failed to process file: {str(e)}")
 
