@@ -4,16 +4,16 @@ import os
 import json
 import numpy as np
 from sentence_transformers import SentenceTransformer
-import google.generativeai as genai
+from google import genai
 
 VECTOR_FILE = 'local_vector_index.json'
 
-if "GEMINI_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-else:
+# Initialize the modern Gemini client
+api_key = st.secrets.get("GEMINI_API_KEY")
+if not api_key:
     api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
-    if api_key:
-        genai.configure(api_key=api_key)
+
+client = genai.Client(api_key=api_key) if api_key else None
 
 @st.cache_resource
 def load_embedding_model():
@@ -68,8 +68,9 @@ def query_vector_store(query_text, top_k=3):
     return [item[1] for item in scored[:top_k]]
 
 def synthesize_response(prompt, context_snippets):
+    if not client:
+        return "Logged to memory, but synthesis failed: Missing Gemini API Key."
     try:
-        model_llm = genai.GenerativeModel('gemini-3.7-flash')
         full_prompt = f"""You are a personal intelligence assistant. Use the following retrieved historical context to answer the user's prompt accurately. If the context doesn't have the answer, rely on your general knowledge while keeping the user's records in mind.
 
 Retrieved Context:
@@ -77,14 +78,17 @@ Retrieved Context:
 
 User Prompt: {prompt}
 """
-        response = model_llm.generate_content(full_prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=full_prompt,
+        )
         return response.text
     except Exception as e:
         return f"Logged to memory, but synthesis failed: {str(e)}"
 
 st.title("🌱 Personal Intelligence Chat Hub")
 
-# Sidebar for File Ingestion with Safe Decoding
+# Sidebar for File Ingestion
 st.sidebar.header("Bulk Data Ingestion")
 uploaded_file = st.sidebar.file_uploader("Upload text or code file", type=["txt", "py", "md", "json"])
 if uploaded_file is not None:
