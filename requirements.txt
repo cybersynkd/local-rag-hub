@@ -3,4 +3,4 @@ sentence-transformers
 numpy
 torch
 torchvision
-google-generativeai
+google-genai
