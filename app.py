@@ -69,7 +69,7 @@ def query_vector_store(query_text, top_k=3):
 
 def synthesize_response(prompt, context_snippets):
     try:
-        model_llm = genai.GenerativeModel('gemini-3.6-flash')
+        model_llm = genai.GenerativeModel('gemini-2.5-flash')
         full_prompt = f"""You are a personal intelligence assistant. Use the following retrieved historical context to answer the user's prompt accurately. If the context doesn't have the answer, rely on your general knowledge while keeping the user's records in mind.
 
 Retrieved Context:
@@ -83,6 +83,16 @@ User Prompt: {prompt}
         return f"Logged to memory, but synthesis failed: {str(e)}"
 
 st.title("🌱 Personal Intelligence Chat Hub")
+
+# Sidebar for File Ingestion
+st.sidebar.header("Bulk Data Ingestion")
+uploaded_file = st.sidebar.file_uploader("Upload text or code file", type=["txt", "py", "md", "json"])
+if uploaded_file is not None:
+    file_content = uploaded_file.getvalue().decode("utf-8")
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    # Chunk file content by paragraphs or lines if large, or save as single entry
+    save_vector_entry(f"File Upload [{uploaded_file.name}]:\n{file_content}", timestamp)
+    st.sidebar.success(f"Successfully ingested {uploaded_file.name} into vector store!")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
