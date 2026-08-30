@@ -69,7 +69,7 @@ def query_vector_store(query_text, top_k=3):
 
 def synthesize_response(prompt, context_snippets):
     try:
-        model_llm = genai.GenerativeModel('gemini-2.5-flash')
+        model_llm = genai.GenerativeModel('gemini-3.6-flash')
         full_prompt = f"""You are a personal intelligence assistant. Use the following retrieved historical context to answer the user's prompt accurately. If the context doesn't have the answer, rely on your general knowledge while keeping the user's records in mind.
 
 Retrieved Context:
