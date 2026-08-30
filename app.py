@@ -2,6 +2,7 @@ import streamlit as st
 import datetime
 import os
 import json
+import glob
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from google import genai
@@ -42,6 +43,11 @@ def save_vector_entry(text, timestamp):
                 records = json.load(f)
         except Exception:
             records = []
+    
+    # Prevent duplicate text entries
+    if any(r.get('text') == text for r in records):
+        return
+
     records.append({
         "time": timestamp, 
         "text": text, 
@@ -49,6 +55,28 @@ def save_vector_entry(text, timestamp):
     })
     with open(VECTOR_FILE, 'w', encoding='utf-8') as f:
         json.dump(records, f, indent=4)
+
+# Automatically load and index local .txt files on startup if not already done
+@st.cache_resource
+def auto_ingest_local_files():
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    local_files = glob.glob("*.txt")
+    for file_path in local_files:
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                file_content = f.read()
+                
+            paragraphs = [p.strip() for p in file_content.split("\n\n") if p.strip()]
+            if not paragraphs:
+                paragraphs = [file_content]
+                
+            for i, chunk in enumerate(paragraphs):
+                chunk_label = f"Local File [{file_path}] Part {i+1}/{len(paragraphs)}"
+                save_vector_entry(f"{chunk_label}:\n{chunk}", timestamp)
+        except Exception as e:
+            print(f"Error auto-ingesting {file_path}: {e}")
+
+auto_ingest_local_files()
 
 def query_vector_store(query_text, top_k=3):
     if not os.path.exists(VECTOR_FILE):
@@ -86,30 +114,6 @@ User Prompt: {prompt}
         return f"Logged to memory, but synthesis failed: {str(e)}"
 
 st.title("🌱 Personal Intelligence Chat Hub")
-
-st.sidebar.header("Bulk Data Ingestion")
-uploaded_file = st.sidebar.file_uploader("Upload text or code file", type=["txt", "py", "md", "json"])
-if uploaded_file is not None:
-    try:
-        bytes_data = uploaded_file.read()
-        try:
-            file_content = bytes_data.decode("utf-8")
-        except UnicodeDecodeError:
-            file_content = bytes_data.decode("latin-1", errors="ignore")
-            
-        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-        
-        paragraphs = [p.strip() for p in file_content.split("\n\n") if p.strip()]
-        if not paragraphs:
-            paragraphs = [file_content]
-            
-        for i, chunk in enumerate(paragraphs):
-            chunk_label = f"File Upload [{uploaded_file.name}] Part {i+1}/{len(paragraphs)}"
-            save_vector_entry(f"{chunk_label}:\n{chunk}", timestamp)
-            
-        st.sidebar.success(f"Successfully ingested {uploaded_file.name} in {len(paragraphs)} safe chunks!")
-    except Exception as e:
-        st.sidebar.error(f"Failed to process file: {str(e)}")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
