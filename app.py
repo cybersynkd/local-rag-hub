@@ -312,3 +312,12 @@ elif app_mode == "📊 AI Model Comparison Dashboard":
         
         st.subheader("Limitation Transparency Scores (1-10)")
         st.dataframe(df_lim.set_index("Model").style.background_gradient(cmap="Oranges", axis=None), use_container_width=True)
+# Add inside your Streamlit app.py
+query_params = st.query_params
+if "sync_payload" in query_params:
+  incoming_data = json.loads(query_params["sync_payload"])
+  save_new_entry(
+      f"Mesh Node Event: {incoming_data.get('type')} - {incoming_data.get('payload', incoming_data)}",
+      datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+  )
+  st.success("Sovereign node payload indexed into AI memory!")
