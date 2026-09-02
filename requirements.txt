@@ -6,3 +6,4 @@ torchvision
 google-genai
 plotly 
 pandas
+matplotlib
