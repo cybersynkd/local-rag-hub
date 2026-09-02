@@ -23,6 +23,20 @@ if not api_key:
     api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 
 client = genai.Client(api_key=api_key) if api_key else None
+# Place this near the top of app.py (after initialization and helper functions)
+query_params = st.query_params
+if "sync_payload" in query_params:
+  try:
+    incoming_data = json.loads(query_params["sync_payload"])
+    payload_text = (
+        f"Mesh Node Event: {incoming_data.get('type')} -"
+        f" {incoming_data.get('payload', incoming_data)}"
+    )
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    save_new_entry(payload_text, timestamp)
+    st.success("Sovereign node payload indexed into AI memory!")
+  except Exception as e:
+    st.error(f"Failed to index sync payload: {e}")
 
 # Vector Store Functions
 def query_vector_store(query_text, top_k=3):
