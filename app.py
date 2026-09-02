@@ -312,5 +312,3 @@ elif app_mode == "📊 AI Model Comparison Dashboard":
         
         st.subheader("Limitation Transparency Scores (1-10)")
         st.dataframe(df_lim.set_index("Model").style.background_gradient(cmap="Oranges", axis=None), use_container_width=True)
-
-Best
