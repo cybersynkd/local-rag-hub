@@ -2,11 +2,13 @@ import os
 import json
 import subprocess
 import datetime
+import time
 import numpy as np
 import streamlit as st
 from google import genai
 
 VECTOR_FILE = "local_vector_index.json"
+CACHE_FILE = "local_response_cache.json"
 
 st.set_page_config(
     page_title="Sovereign Personal AI",
@@ -22,17 +24,34 @@ if not api_key:
 
 client = genai.Client(api_key=api_key) if api_key else None
 
+# Sidebar Model & Tool Configuration
+st.sidebar.markdown("**Active Model & Tools**")
+selected_model = st.sidebar.selectbox(
+    "Free Tier Model",
+    ["gemini-3.6-flash", "gemini-3.1-flash-lite"],
+    index=0,
+    help="Flash models maximize free tier allowances and support high context limits."
+)
+enable_rag = st.sidebar.checkbox("Semantic RAG Embeddings", value=True)
+enable_cache = st.sidebar.checkbox("Aggressive Local Caching", value=True, help="Saves free-tier quota by caching repeated prompts.")
+enable_exec = st.sidebar.checkbox("Python Script Execution Tool", value=True)
+
 def get_embedding(text):
     if not client:
         return None
-    try:
-        response = client.models.embed_content(
-            model="text-embedding-004",
-            contents=text
-        )
-        return response.embedding.values
-    except Exception:
-        return None
+    for attempt in range(3):
+        try:
+            response = client.models.embed_content(
+                model="text-embedding-004",
+                contents=text
+            )
+            return response.embedding.values
+        except Exception as e:
+            if "429" in str(e) and attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            return None
+    return None
 
 def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
@@ -91,6 +110,30 @@ def save_new_entry_with_embedding(text, timestamp):
     with open(VECTOR_FILE, 'w', encoding='utf-8') as f:
         json.dump(records, f, indent=4)
 
+def check_cache(prompt):
+    if not enable_cache or not os.path.exists(CACHE_FILE):
+        return None
+    try:
+        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+            cache = json.load(f)
+            return cache.get(prompt)
+    except Exception:
+        return None
+
+def save_cache(prompt, response):
+    if not enable_cache:
+        return
+    cache = {}
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                cache = json.load(f)
+        except Exception:
+            cache = {}
+    cache[prompt] = response
+    with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+        json.dump(cache, f, indent=4)
+
 def execute_python_script(script_code):
     try:
         result = subprocess.run(
@@ -109,29 +152,39 @@ def execute_python_script(script_code):
 def synthesize_response(prompt, context_snippets):
     if not client:
         return "Logged to memory, but synthesis failed: Missing Gemini API Key."
-    try:
-        full_prompt = f"""You are a personal intelligence assistant. Use the following retrieved historical context to answer the user's prompt accurately.
+    
+    cached = check_cache(prompt)
+    if cached:
+        return f"{cached} *(Retrieved from local cache)*"
+
+    full_prompt = f"""You are a personal intelligence assistant. Use the following retrieved historical context to answer the user's prompt accurately.
 
 Retrieved Context:
 {context_snippets}
 
 User Prompt: {prompt}
 """
-        response = client.models.generate_content(
-            model='gemini-3.6-flash',
-            contents=full_prompt,
-        )
-        return response.text
-    except Exception as e:
-        return f"Synthesis failed: {str(e)}"
+    
+    for attempt in range(4):
+        try:
+            response = client.models.generate_content(
+                model=selected_model,
+                contents=full_prompt,
+            )
+            text_resp = response.text
+            save_cache(prompt, text_resp)
+            return text_resp
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                if attempt < 3:
+                    time.sleep(2 ** attempt + 1)
+                    continue
+            return f"Synthesis failed due to rate limit or error: {error_str}"
+    return "Synthesis failed: Max retries exceeded for free tier limits."
 
 # Unified Main Screen Layout
 st.title("🌱 Sovereign Personal Intelligence Hub")
-
-# Sidebar Controls & Terminal
-st.sidebar.markdown("**Active Tools**")
-enable_rag = st.sidebar.checkbox("Semantic RAG Embeddings", value=True)
-enable_exec = st.sidebar.checkbox("Python Script Execution Tool", value=True)
 
 if enable_exec:
     st.sidebar.markdown("---")
