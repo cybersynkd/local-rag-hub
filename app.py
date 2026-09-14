@@ -17,6 +17,33 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- RECURRENT LOOPED TRANSFORMER (RLT) STATE ENGINE ---
+class RecurrentLoopStateTracker:
+    """Engine for continuous state propagation inspired by RLT mechanics for the Sovereign Hub."""
+    def __init__(self, layer_depth=48):
+        self.layer_depth = layer_depth
+        self.hidden_state = 0.5
+        self.swa_cache = []
+
+    def step(self, token_input):
+        active_computation = self._fuse_state(token_input, self.hidden_state, self.swa_cache)
+        self.hidden_state = active_computation['next_hidden']
+        self.swa_cache = active_computation['updated_swa']
+        return active_computation['output']
+
+    def _fuse_state(self, token, h_prev, cache):
+        token_str = str(token)
+        next_h = (hash(token_str + str(h_prev)) % 10000) / 10000.0
+        updated_cache = (cache + [token_str])[-self.layer_depth:]
+        depth_traversal = len(updated_cache) * self.layer_depth
+        return {
+            'next_hidden': next_h,
+            'updated_swa': updated_cache,
+            'output': f"RLT Vector [Depth: {depth_traversal} | State: {next_h:.4f}]"
+        }
+
+rlt_engine = RecurrentLoopStateTracker(layer_depth=48)
+
 # API Key Setup
 api_key = st.secrets.get("GEMINI_API_KEY")
 if not api_key:
@@ -35,6 +62,12 @@ selected_model = st.sidebar.selectbox(
 enable_rag = st.sidebar.checkbox("Semantic RAG Embeddings", value=True)
 enable_cache = st.sidebar.checkbox("Aggressive Local Caching", value=True, help="Saves free-tier quota by caching repeated prompts.")
 enable_exec = st.sidebar.checkbox("Python Script Execution Tool", value=True)
+
+# --- RLT STATUS DISPLAY IN SIDEBAR ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("**RLT Lattice Status**")
+rlt_placeholder = st.sidebar.empty()
+rlt_placeholder.text(f"State: {rlt_engine.hidden_state:.4f} | SWA: {len(rlt_engine.swa_cache)}")
 
 def get_embedding(text):
     if not client:
@@ -157,7 +190,14 @@ def synthesize_response(prompt, context_snippets):
     if cached:
         return f"{cached} *(Retrieved from local cache)*"
 
-    full_prompt = f"""You are a personal intelligence assistant. Use the following retrieved historical context to answer the user's prompt accurately.
+    # --- PASS THROUGH RLT STATE TRACKER ---
+    rlt_sig = rlt_engine.step(prompt)
+    rlt_placeholder.text(f"State: {rlt_engine.hidden_state:.4f} | SWA: {len(rlt_engine.swa_cache)}")
+
+    full_prompt = f"""You are a personal intelligence assistant operating within a Recurrent Looped Transformer (RLT) architectural framework. 
+Current Recurrent Lattice Vector: {rlt_sig}
+
+Use the following retrieved historical context and ongoing continuous state to answer the user's prompt accurately.
 
 Retrieved Context:
 {context_snippets}
@@ -193,7 +233,12 @@ if enable_exec:
     if st.sidebar.button("Run in Background"):
         output = execute_python_script(quick_script)
         st.sidebar.code(output)
-        save_new_entry_with_embedding(f"Executed Script: {quick_script} | Output: {output}", datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
+        
+        # --- PASS SCRIPT EXECUTION THROUGH RLT ---
+        rlt_exec_sig = rlt_engine.step(f"ScriptExec: {quick_script}")
+        rlt_placeholder.text(f"State: {rlt_engine.hidden_state:.4f} | SWA: {len(rlt_engine.swa_cache)}")
+        
+        save_new_entry_with_embedding(f"Executed Script: {quick_script} | Output: {output} | {rlt_exec_sig}", datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
 
 # Main Chat Interface Loop
 if "messages" not in st.session_state:
