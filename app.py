@@ -17,9 +17,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- RECURRENT LOOPED TRANSFORMER (RLT) STATE ENGINE ---
+# ── 1. PERSISTENT RLT STATE ENGINE ───────────────────────────
 class RecurrentLoopStateTracker:
-    """Engine for continuous state propagation inspired by RLT mechanics for the Sovereign Hub."""
+    """Engine for continuous state propagation preserved across Streamlit rerun cycles."""
     def __init__(self, layer_depth=48):
         self.layer_depth = layer_depth
         self.hidden_state = 0.5
@@ -42,33 +42,44 @@ class RecurrentLoopStateTracker:
             'output': f"RLT Vector [Depth: {depth_traversal} | State: {next_h:.4f}]"
         }
 
-rlt_engine = RecurrentLoopStateTracker(layer_depth=48)
+# Cache resource ensures RLT state persists through app updates without resetting
+@st.cache_resource
+def get_rlt_engine():
+    return RecurrentLoopStateTracker(layer_depth=48)
 
-# API Key Setup
-api_key = st.secrets.get("GEMINI_API_KEY")
-if not api_key:
-    api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
+rlt_engine = get_rlt_engine()
+
+# ── 2. SIDEBAR & TOOL CONFIGURATION ──────────────────────────
+with st.sidebar:
+    st.title("🌱 Control Panel")
+    
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        api_key = st.text_input("Enter Gemini API Key", type="password")
+
+    st.markdown("### Active Model & Settings")
+    selected_model = st.selectbox(
+        "Free Tier Model",
+        ["gemini-3.6-flash", "gemini-3.1-flash-lite"],
+        index=0,
+        help="Flash models maximize free tier allowances and support high context limits."
+    )
+    
+    enable_rag = st.checkbox("Semantic RAG Embeddings", value=True)
+    enable_cache = st.checkbox("Aggressive Local Caching", value=True, help="Saves quota by caching repeated prompts.")
+    enable_exec = st.checkbox("Python Script Execution Tool", value=True)
+
+    st.markdown("---")
+    st.markdown("### RLT Lattice Telemetry")
+    rlt_metric_col1, rlt_metric_col2 = st.columns(2)
+    with rlt_metric_col1:
+        st.metric("Hidden State", f"{rlt_engine.hidden_state:.4f}")
+    with rlt_metric_col2:
+        st.metric("SWA Depth", len(rlt_engine.swa_cache))
 
 client = genai.Client(api_key=api_key) if api_key else None
 
-# Sidebar Model & Tool Configuration
-st.sidebar.markdown("**Active Model & Tools**")
-selected_model = st.sidebar.selectbox(
-    "Free Tier Model",
-    ["gemini-3.6-flash", "gemini-3.1-flash-lite"],
-    index=0,
-    help="Flash models maximize free tier allowances and support high context limits."
-)
-enable_rag = st.sidebar.checkbox("Semantic RAG Embeddings", value=True)
-enable_cache = st.sidebar.checkbox("Aggressive Local Caching", value=True, help="Saves free-tier quota by caching repeated prompts.")
-enable_exec = st.sidebar.checkbox("Python Script Execution Tool", value=True)
-
-# --- RLT STATUS DISPLAY IN SIDEBAR ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("**RLT Lattice Status**")
-rlt_placeholder = st.sidebar.empty()
-rlt_placeholder.text(f"State: {rlt_engine.hidden_state:.4f} | SWA: {len(rlt_engine.swa_cache)}")
-
+# ── 3. DATA & CACHING PIPELINES ──────────────────────────────
 def get_embedding(text):
     if not client:
         return None
@@ -180,7 +191,7 @@ def execute_python_script(script_code):
         else:
             return f"Execution Error:\n{result.stderr}"
     except Exception as e:
-            return f"Execution Failed: {str(e)}"
+        return f"Execution Failed: {str(e)}"
 
 def synthesize_response(prompt, context_snippets):
     if not client:
@@ -188,11 +199,10 @@ def synthesize_response(prompt, context_snippets):
     
     cached = check_cache(prompt)
     if cached:
-        return f"{cached} *(Retrieved from local cache)*"
+        return f"{cached}\n\n*(Retrieved from local cache)*"
 
-    # --- PASS THROUGH RLT STATE TRACKER ---
+    # Advance continuous state vector
     rlt_sig = rlt_engine.step(prompt)
-    rlt_placeholder.text(f"State: {rlt_engine.hidden_state:.4f} | SWA: {len(rlt_engine.swa_cache)}")
 
     full_prompt = f"""You are a personal intelligence assistant operating within a Recurrent Looped Transformer (RLT) architectural framework. 
 Current Recurrent Lattice Vector: {rlt_sig}
@@ -223,24 +233,26 @@ User Prompt: {prompt}
             return f"Synthesis failed due to rate limit or error: {error_str}"
     return "Synthesis failed: Max retries exceeded for free tier limits."
 
-# Unified Main Screen Layout
+# ── 4. MAIN INTERFACE ─────────────────────────────────────────
 st.title("🌱 Sovereign Personal Intelligence Hub")
 
 if enable_exec:
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("⚡ Quick Python Runner")
-    quick_script = st.sidebar.text_area("Snippet:", "print('Node Active')")
-    if st.sidebar.button("Run in Background"):
-        output = execute_python_script(quick_script)
-        st.sidebar.code(output)
-        
-        # --- PASS SCRIPT EXECUTION THROUGH RLT ---
-        rlt_exec_sig = rlt_engine.step(f"ScriptExec: {quick_script}")
-        rlt_placeholder.text(f"State: {rlt_engine.hidden_state:.4f} | SWA: {len(rlt_engine.swa_cache)}")
-        
-        save_new_entry_with_embedding(f"Executed Script: {quick_script} | Output: {output} | {rlt_exec_sig}", datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
+    with st.sidebar:
+        st.markdown("---")
+        st.subheader("⚡ Quick Python Runner")
+        quick_script = st.text_area("Snippet:", "print('Node Active')")
+        if st.button("Run in Background", use_container_width=True):
+            output = execute_python_script(quick_script)
+            st.code(output, language="python")
+            
+            rlt_exec_sig = rlt_engine.step(f"ScriptExec: {quick_script}")
+            save_new_entry_with_embedding(
+                f"Executed Script: {quick_script} | Output: {output} | {rlt_exec_sig}", 
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            )
+            st.rerun()
 
-# Main Chat Interface Loop
+# Chat Messages
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -256,14 +268,17 @@ if prompt := st.chat_input("Ask a question or log an action..."):
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     
     if enable_rag:
-        relevant = semantic_query_vector_store(prompt, top_k=3)
-        context_snippets = "\n".join([f"- [{r.get('time', 'Unknown')}] {r['text']}" for r in relevant]) if relevant else "No prior context found."
+        with st.status("Querying Local Vector Store...", expanded=False):
+            relevant = semantic_query_vector_store(prompt, top_k=3)
+            context_snippets = "\n".join([f"- [{r.get('time', 'Unknown')}] {r['text']}" for r in relevant]) if relevant else "No prior context found."
     else:
         context_snippets = "RAG disabled."
 
-    response_content = synthesize_response(prompt, context_snippets)
-    save_new_entry_with_embedding(prompt, timestamp)
-
     with st.chat_message("assistant"):
-        st.markdown(response_content)
+        with st.spinner("Synthesizing response via RLT pipeline..."):
+            response_content = synthesize_response(prompt, context_snippets)
+            st.markdown(response_content)
+            
+    save_new_entry_with_embedding(prompt, timestamp)
     st.session_state.messages.append({"role": "assistant", "content": response_content})
+    st.rerun()
